@@ -25,7 +25,7 @@ LOGGER_ID = -1002059639505
 OWNER_ID = 7337748194
 CHANNEL_ID = -1002059639505
 
-Helpers = [7337748194, 7202110938] 
+Helpers = [7337748194, 7202110938, 6648618400] 
 
 ## Fill these variables if you're deploying on heroku.
 # Your heroku app name
