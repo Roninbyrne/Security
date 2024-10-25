@@ -48,7 +48,7 @@ SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/phoenixXsupport")
 
 
 # Maximum limit for fetching playlist's track from youtube, spotify, apple links.
-PLAYLIST_FETCH_LIMIT int(getenv("PLAYLIST_FETCH_LIMIT", 25))
+PLAYLIST_FETCH_LIMIT = int(getenv("PLAYLIST_FETCH_LIMIT", 25))
 
 
 # Telegram audio and video file size limit (in bytes)
