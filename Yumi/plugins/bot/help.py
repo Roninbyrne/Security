@@ -3,7 +3,7 @@ from typing import Union
 from pyrogram import filters, types
 from pyrogram.types import InlineKeyboardMarkup, Message
 
-from yumi import app
+from Yumi import app
 from Yumi.utils import help_pannel
 from Yumi.utils.database import get_lang
 from Yumi.utils.decorators.language import LanguageStart, languageCB
