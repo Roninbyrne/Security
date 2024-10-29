@@ -156,14 +156,14 @@ async def handle_button_click(client, callback_query):
                 file_id = message.document.file_id
                 sent_message = await client.send_document(user_id, file_id)
 
-            await callback_query.answer("ꜰᴇᴛᴄʜɪɴɢ ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ.... ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ʙᴏᴛ ᴀʀᴏɴᴀ ᴅᴍ", show_alert=True)
+            await callback_query.answer("ꜰᴇᴛᴄʜɪɴɢ ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ.... ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ", show_alert=True)
             await client.send_message(user_id, "ᴘʟᴇᴀꜱᴇ ꜰᴏʀᴡᴀʀᴅ ᴛʜɪꜱ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ɪɴ ʏᴏᴜʀ ꜱᴀᴠᴇᴅ ᴍᴇꜱꜱᴀɢᴇꜱ ᴀɴᴅ ᴅᴏᴡɴʟᴏᴀᴅ ᴛʜᴇʀᴇ, ᴛʜᴇ ᴄᴏɴᴛᴇɴᴛ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ .")
             await asyncio.sleep(300)
             await client.delete_messages(user_id, sent_message.id)
         else:
             await callback_query.answer("ᴄᴏɴᴛᴇɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ ᴏʀ ɪᴛꜱ ɴᴏᴛ ᴀ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ᴍᴇꜱꜱᴀɢᴇ.", show_alert=True)
     except Exception as e:
-        await callback_query.answer("ꜰᴀɪʟᴇᴅ ᴛᴏ ʀᴇᴛʀɪᴇᴠᴇ ᴄᴏɴᴛᴇɴᴛ, ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀɢᴀɪɴ.", show_alert=True)
+        await callback_query.answer("ꜰᴀɪʟᴇᴅ ᴛᴏ ʀᴇᴛʀɪᴇᴠᴇ ᴄᴏɴᴛᴇɴᴛ, ᴘʟᴇᴀꜱᴇ ᴛʏᴘᴇ /start ᴏɴ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ.", show_alert=True)
         print(f"Error fetching content: {e}")
 
 async def notify_expiring_subscriptions():
