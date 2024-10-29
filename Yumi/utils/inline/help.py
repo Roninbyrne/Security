@@ -1,7 +1,5 @@
 from typing import Union
-
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 from Yumi import app
 
 def help_pannel(_, START: Union[bool, int] = None):
@@ -38,10 +36,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                 InlineKeyboardButton(
                     text=_["H_B_7"],
                     callback_data="help_callback hb7",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_8"],
-                    callback_data="help_callback hb8",
                 ),
             ],
             mark,
