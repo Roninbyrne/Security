@@ -242,12 +242,12 @@ def subscription_status(client, message):
 
     client.send_message(chat_id, status_message)
 
-@app.on_message(filters.command("removemmbr") & filters.user(Helpers))
+@app.on_message(filters.command("rmmbr") & filters.user(Helpers))
 def remove_member(client, message):
     try:
         command_params = message.text.split(" ")
         if len(command_params) < 2:
-            client.send_message(message.chat.id, "Usage: /removemmbr <username/UserID>")
+            client.send_message(message.chat.id, "Usage: /rmmbr <username/UserID>")
             return
 
         if message.reply_to_message:
@@ -266,7 +266,7 @@ def remove_member(client, message):
     except Exception as e:
         client.send_message(message.chat.id, f"Error: {e}")
 
-@app.on_message(filters.command("listmmbrs") & filters.user(Helpers))
+@app.on_message(filters.command("mmbrlist") & filters.user(Helpers))
 def list_members(client, message):
     subscribers = list(subscriptions_col.find())
     if not subscribers:
