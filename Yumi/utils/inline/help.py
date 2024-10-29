@@ -5,14 +5,14 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from Yumi import app
 
 
-def help_pannel(_, START: Union[bool, int] = None):
+def help_panel(_, START: Union[bool, int] = None):
     second = [
         InlineKeyboardButton(
             text=_["BACK_BUTTON"],
             callback_data=f"settingsback_helper",
         ),
     ]
-    mark = second if START else second  # Always show the BACK_BUTTON
+    mark = second if START else second
     upl = InlineKeyboardMarkup(
         [
             [
@@ -38,10 +38,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                     text=_["H_B_5"],
                     callback_data="help_callback hb5",
                 ),
-                InlineKeyboardButton(
-                    text=_["H_B_6"],
-                    callback_data="help_callback hb6",
-                ),
             ],
             [
                 InlineKeyboardButton(
@@ -51,10 +47,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                 InlineKeyboardButton(
                     text=_["H_B_8"],
                     callback_data="help_callback hb8",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_9"],
-                    callback_data="help_callback hb9",
                 ),
             ],
             [
@@ -66,10 +58,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                     text=_["H_B_11"],
                     callback_data="help_callback hb11",
                 ),
-                InlineKeyboardButton(
-                    text=_["H_B_12"],
-                    callback_data="help_callback hb12",
-                ),
             ],
             [
                 InlineKeyboardButton(
@@ -79,10 +67,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                 InlineKeyboardButton(
                     text=_["H_B_14"],
                     callback_data="help_callback hb14",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_15"],
-                    callback_data="help_callback hb15",
                 ),
             ],
             mark,
