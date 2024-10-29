@@ -4,7 +4,6 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from Yumi import app
 
-
 def help_pannel(_, START: Union[bool, int] = None):
     second = [
         InlineKeyboardButton(
@@ -23,10 +22,6 @@ def help_pannel(_, START: Union[bool, int] = None):
                 InlineKeyboardButton(
                     text=_["H_B_2"],
                     callback_data="help_callback hb2",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_3"],
-                    callback_data="help_callback hb3",
                 ),
             ],
             [
@@ -49,31 +44,10 @@ def help_pannel(_, START: Union[bool, int] = None):
                     callback_data="help_callback hb8",
                 ),
             ],
-            [
-                InlineKeyboardButton(
-                    text=_["H_B_10"],
-                    callback_data="help_callback hb10",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_11"],
-                    callback_data="help_callback hb11",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_["H_B_13"],
-                    callback_data="help_callback hb13",
-                ),
-                InlineKeyboardButton(
-                    text=_["H_B_14"],
-                    callback_data="help_callback hb14",
-                ),
-            ],
             mark,
         ]
     )
     return upl
-
 
 def help_back_markup(_):
     upl = InlineKeyboardMarkup(
@@ -87,7 +61,6 @@ def help_back_markup(_):
         ]
     )
     return upl
-
 
 def private_help_panel(_):
     buttons = [
