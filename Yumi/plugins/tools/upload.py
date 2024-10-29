@@ -129,7 +129,7 @@ def post_video_to_channel(public_channel, video_id, description, cover_photo):
     app.send_photo(
         chat_id=public_channel,
         photo=cover_photo,
-        caption=f"{description}\n\n❱ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ<a href='https://t.me/mystic_legion'> [ ᴄʟɪᴄᴋ ʜᴇʀᴇ ]</a>",
+        caption=f"{description}\n\n❱ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ<a href='https://t.me/phoenixXsupport'> [ ᴄʟɪᴄᴋ ʜᴇʀᴇ ]</a>",
         reply_markup=button
     )
 
