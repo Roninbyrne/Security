@@ -31,7 +31,7 @@ def add_subscription(user_id, start_date, months_subscribed):
 def remove_subscription(user_id):
     subscriptions_col.delete_one({"user_id": user_id})
 
-@app.on_message(filters.command("upload"))
+@app.on_message(filters.command("upload") & filters.private)
 def upload_video(client, message):
     user_id = message.chat.id
     if not is_user_allowed(user_id):
