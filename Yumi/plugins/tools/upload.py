@@ -110,7 +110,7 @@ async def get_cover_photo(client, message):
         private_channel = user_state.get("private_channel")
 
         video_id = video_link.split('/')[-1]
-        post_video_to_channel(public_channel, video_id, description, cover_photo)
+        await post_video_to_channel(public_channel, video_id, description, cover_photo)  # Add 'await' here
 
         video_channels_collection.update_one(
             {"video_id": video_id},
