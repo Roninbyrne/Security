@@ -125,8 +125,8 @@ def get_cover_photo(client, message):
 
 def post_video_to_channel(public_channel, video_id, description, cover_photo):
     button = InlineKeyboardMarkup([[InlineKeyboardButton("✯ ᴅᴏᴡɴʟᴏᴀᴅ ✯", callback_data=video_id)]])
-    
-    client.send_photo(  # Corrected here from app.send_photo to client.send_photo
+
+    app.send_photo(
         chat_id=public_channel,
         photo=cover_photo,
         caption=f"{description}\n\n❱ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ<a href='https://t.me/phoenixXsupport'> [ ᴄʟɪᴄᴋ ʜᴇʀᴇ ]</a>",
@@ -156,14 +156,14 @@ async def handle_button_click(client, callback_query):
                 file_id = message.document.file_id
                 sent_message = await client.send_document(user_id, file_id)
 
-            await callback_query.answer("Fetching your request.... please check the bot Yumi DM", show_alert=True)
-            await client.send_message(user_id, "Please forward this video or file in your saved messages, and download from there. The content will be deleted after 5 minutes.")
+            await callback_query.answer("ꜰᴇᴛᴄʜɪɴɢ ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ.... ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ", show_alert=True)
+            await client.send_message(user_id, "ᴘʟᴇᴀꜱᴇ ꜰᴏʀᴡᴀʀᴅ ᴛʜɪꜱ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ɪɴ ʏᴏᴜʀ ꜱᴀᴠᴇᴅ ᴍᴇꜱꜱᴀɢᴇꜱ ᴀɴᴅ ᴅᴏᴡɴʟᴏᴀᴅ ᴛʜᴇʀᴇ, ᴛʜᴇ ᴄᴏɴᴛᴇɴᴛ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ .")
             await asyncio.sleep(300)
             await client.delete_messages(user_id, sent_message.id)
         else:
-            await callback_query.answer("Content not found or it's not a video or file message.", show_alert=True)
+            await callback_query.answer("ᴄᴏɴᴛᴇɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ ᴏʀ ɪᴛꜱ ɴᴏᴛ ᴀ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ᴍᴇꜱꜱᴀɢᴇ.", show_alert=True)
     except Exception as e:
-        await callback_query.answer("Failed to retrieve content, please try again later.", show_alert=True)
+        await callback_query.answer("ꜰᴀɪʟᴇᴅ ᴛᴏ ʀᴇᴛʀɪᴇᴠᴇ ᴄᴏɴᴛᴇɴᴛ, ᴘʟᴇᴀꜱᴇ ᴛʏᴘᴇ /start ᴏɴ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ.", show_alert=True)
         print(f"Error fetching content: {e}")
 
 async def notify_expiring_subscriptions():
@@ -185,29 +185,33 @@ async def notify_expiring_subscriptions():
         await asyncio.sleep(3600)
 
 @app.on_message(filters.command("addmmbr") & filters.user(Helpers))
-def add_member(client, message):
+async def add_member(client, message):
     try:
         command_params = message.text.split(" ")
         if len(command_params) < 3:
-            client.send_message(message.chat.id, "Usage: /addmmbr <username/UserID/reply to user> <months>")
+            await client.send_message(message.chat.id, "Usage: /addmmbr <username/UserID/reply to user> <months>")
             return
 
         if message.reply_to_message:
             target_user = message.reply_to_message.from_user.id
             target_name = message.reply_to_message.from_user.first_name
         else:
-            target_user = int(command_params[1]) if command_params[1].isdigit() else client.get_users(command_params[1]).id
-            target_name = client.get_users(target_user).first_name
+            if command_params[1].isdigit():
+                target_user = int(command_params[1])
+                target_name = (await client.get_users(target_user)).first_name
+            else:
+                target_user = (await client.get_users(command_params[1])).id
+                target_name = (await client.get_users(target_user)).first_name
 
         months_subscribed = int(command_params[2])
         start_date = datetime.now()
 
         add_subscription(target_user, start_date, months_subscribed)
 
-        client.send_message(message.chat.id, f"User {target_name} has been added with a {months_subscribed}-month subscription.")
-        client.send_message(target_user, f"🎉 You have been granted access to the bot for {months_subscribed} month(s).")
+        await client.send_message(message.chat.id, f"User {target_name} has been added with a {months_subscribed}-month subscription.")
+        await client.send_message(target_user, f"🎉 You have been granted access to the bot for {months_subscribed} month(s).")
     except Exception as e:
-        client.send_message(message.chat.id, f"Error: {e}")
+        await client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("status"))
 def subscription_status(client, message):
