@@ -32,10 +32,10 @@ def remove_subscription(user_id):
     subscriptions_col.delete_one({"user_id": user_id})
 
 @app.on_message(filters.command("upload") & filters.private)
-def upload_video(client, message):
+async def upload_video(client, message):
     user_id = message.chat.id
     if not is_user_allowed(user_id):
-        client.send_message(user_id, "❌ You do not have an active subscription. Please renew to use this feature.")
+        await client.send_message(user_id, "❌ You do not have an active subscription. Please renew to use this feature.")
         return
 
     try:
@@ -43,7 +43,7 @@ def upload_video(client, message):
         public_channel = command_params[1]
         private_channel = command_params[2]
     except IndexError:
-        client.send_message(message.chat.id, "Usage: /upload <public_channel> <private_channel>")
+        await client.send_message(message.chat.id, "Usage: /upload <public_channel> <private_channel>")
         return
 
     user_states_collection.update_one(
@@ -55,7 +55,7 @@ def upload_video(client, message):
         }},
         upsert=True
     )
-    client.send_message(message.chat.id, "Please send the video message link.")
+    await client.send_message(message.chat.id, "Please send the video message link.")
 
 def is_user_allowed(user_id):
     subscription = get_subscription(user_id)
@@ -69,7 +69,7 @@ def is_user_allowed(user_id):
     return datetime.now() <= expiration_date
 
 @app.on_message(filters.private)
-def handle_messages(client, message):
+async def handle_messages(client, message):
     user_id = message.chat.id
     user_state = user_states_collection.find_one({"user_id": user_id})
 
@@ -77,29 +77,29 @@ def handle_messages(client, message):
         state = user_state.get("step")
 
         if state == "get_video_link":
-            get_video_link(client, message)
+            await get_video_link(client, message)
         elif state == "get_description":
-            get_description(client, message)
+            await get_description(client, message)
         elif state == "get_cover_photo":
-            get_cover_photo(client, message)
+            await get_cover_photo(client, message)
 
-def get_video_link(client, message):
+async def get_video_link(client, message):
     video_link = message.text
     user_states_collection.update_one(
         {"user_id": message.chat.id},
         {"$set": {"video_link": video_link, "step": "get_description"}}
     )
-    client.send_message(message.chat.id, "Please provide a description.")
+    await client.send_message(message.chat.id, "Please provide a description.")
 
-def get_description(client, message):
+async def get_description(client, message):
     description = message.text
     user_states_collection.update_one(
         {"user_id": message.chat.id},
         {"$set": {"description": description, "step": "get_cover_photo"}}
     )
-    client.send_message(message.chat.id, "Please send the cover photo.")
+    await client.send_message(message.chat.id, "Please send the cover photo.")
 
-def get_cover_photo(client, message):
+async def get_cover_photo(client, message):
     if message.photo:
         cover_photo = message.photo.file_id
         user_state = user_states_collection.find_one({"user_id": message.chat.id})
@@ -121,12 +121,12 @@ def get_cover_photo(client, message):
             upsert=True
         )
 
-        client.send_message(message.chat.id, "Video details uploaded to the public channel!")
+        await client.send_message(message.chat.id, "Video details uploaded to the public channel!")
 
-def post_video_to_channel(public_channel, video_id, description, cover_photo):
+async def post_video_to_channel(public_channel, video_id, description, cover_photo):
     button = InlineKeyboardMarkup([[InlineKeyboardButton("✯ ᴅᴏᴡɴʟᴏᴀᴅ ✯", callback_data=video_id)]])
 
-    app.send_photo(
+    await app.send_photo(
         chat_id=public_channel,
         photo=cover_photo,
         caption=f"{description}\n\n❱ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ<a href='https://t.me/phoenixXsupport'> [ ᴄʟɪᴄᴋ ʜᴇʀᴇ ]</a>",
@@ -214,13 +214,13 @@ async def add_member(client, message):
         await client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("status"))
-def subscription_status(client, message):
+async def subscription_status(client, message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     subscription = get_subscription(user_id)
 
     if not subscription:
-        client.send_message(chat_id, "❌ You do not have an active subscription.")
+        await client.send_message(chat_id, "❌ You do not have an active subscription.")
         return
 
     start_date = subscription["start_date"]
@@ -229,7 +229,7 @@ def subscription_status(client, message):
     time_remaining = expiration_date - datetime.now()
 
     if time_remaining.total_seconds() <= 0:
-        client.send_message(chat_id, "❌ Your subscription has expired.")
+        await client.send_message(chat_id, "❌ Your subscription has expired.")
         return
 
     months_left = time_remaining.days // 30
@@ -244,37 +244,37 @@ def subscription_status(client, message):
         f"Time Remaining: {months_left} months, {days_left} days, {hours_left} hours, {minutes_left} minutes\n"
     )
 
-    client.send_message(chat_id, status_message)
+    await client.send_message(chat_id, status_message)
 
 @app.on_message(filters.command("rmmbr") & filters.user(Helpers))
-def remove_member(client, message):
+async def remove_member(client, message):
     try:
         command_params = message.text.split(" ")
         if len(command_params) < 2:
-            client.send_message(message.chat.id, "Usage: /rmmbr <username/UserID>")
+            await client.send_message(message.chat.id, "Usage: /rmmbr <username/UserID>")
             return
 
         if message.reply_to_message:
             target_user = message.reply_to_message.from_user.id
             target_name = message.reply_to_message.from_user.first_name
         else:
-            target_user = int(command_params[1]) if command_params[1].isdigit() else client.get_users(command_params[1]).id
-            target_name = client.get_users(target_user).first_name
+            target_user = int(command_params[1]) if command_params[1].isdigit() else (await client.get_users(command_params[1])).id
+            target_name = (await client.get_users(target_user)).first_name
 
         if get_subscription(target_user):
             remove_subscription(target_user)
-            client.send_message(message.chat.id, f"User {target_name} has been removed from the subscription list.")
-            client.send_message(target_user, "❌ Your subscription has been manually revoked by an admin.")
+            await client.send_message(message.chat.id, f"User {target_name} has been removed from the subscription list.")
+            await client.send_message(target_user, "❌ Your subscription has been manually revoked by an admin.")
         else:
-            client.send_message(message.chat.id, f"User {target_name} is not in the subscription list.")
+            await client.send_message(message.chat.id, f"User {target_name} is not in the subscription list.")
     except Exception as e:
-        client.send_message(message.chat.id, f"Error: {e}")
+        await client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("mmbrlist") & filters.user(Helpers))
-def list_members(client, message):
+async def list_members(client, message):
     subscribers = list(subscriptions_col.find())
     if not subscribers:
-        client.send_message(message.chat.id, "No users are currently subscribed.")
+        await client.send_message(message.chat.id, "No users are currently subscribed.")
         return
 
     member_list = "📝 **Subscribed Users:**\n\n"
@@ -285,11 +285,11 @@ def list_members(client, message):
         expiration_date = start_date + timedelta(days=months_subscribed * 30)
         time_remaining = expiration_date - datetime.now()
 
-        user_info = client.get_users(user_id)
+        user_info = await client.get_users(user_id)
         member_list += f"**{user_info.first_name}** (ID: {user_id})\n"
         member_list += f"Time remaining: {time_remaining.days} days, {time_remaining.seconds // 3600} hours, and {(time_remaining.seconds // 60) % 60} minutes\n\n"
 
-    client.send_message(message.chat.id, member_list)
+    await client.send_message(message.chat.id, member_list)
 
 async def start_periodic_task():
     asyncio.create_task(notify_expiring_subscriptions())
