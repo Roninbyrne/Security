@@ -4,13 +4,21 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 import asyncio
+import time
+import logging
 from config import MONGO_DB_URI, Helpers
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 mongo_client = MongoClient(MONGO_DB_URI)
 db = mongo_client['my_bot_db']
 user_states_collection = db['user_states']
 video_channels_collection = db['video_channels']
 subscriptions_col = db['user_subscriptions']
+
+user_command_times = {}
 
 def get_subscription(user_id):
     return subscriptions_col.find_one({"user_id": user_id})
@@ -31,6 +39,44 @@ def add_subscription(user_id, start_date, months_subscribed):
 def remove_subscription(user_id):
     subscriptions_col.delete_one({"user_id": user_id})
 
+def is_user_allowed(user_id):
+    subscription = get_subscription(user_id)
+    if not subscription:
+        return False
+
+    start_date = subscription["start_date"]
+    months_subscribed = subscription["months_subscribed"]
+    expiration_date = start_date + timedelta(days=months_subscribed * 30)
+
+    return datetime.now() <= expiration_date
+
+def is_rate_limited(user_id, command, cooldown_time=60):
+    current_time = time.time()
+    last_command_time = user_command_times.get(user_id, {}).get(command)
+
+    if last_command_time and current_time - last_command_time < cooldown_time:
+        return True
+    user_command_times.setdefault(user_id, {})[command] = current_time
+    return False
+
+async def notify_expiring_subscriptions():
+    while True:
+        for subscription in list(subscriptions_col.find()):
+            user_id = subscription["user_id"]
+            start_date = subscription["start_date"]
+            months_subscribed = subscription["months_subscribed"]
+            expiration_date = start_date + timedelta(days=months_subscribed * 30)
+            time_remaining = expiration_date - datetime.now()
+
+            if timedelta(hours=23) < time_remaining < timedelta(hours=24):
+                await app.send_message(user_id, f"⚠️ Your subscription will expire in 24 hours. Renew now to continue enjoying the bot's services!")
+
+            if time_remaining <= timedelta(0):
+                await app.send_message(user_id, "❌ Your subscription has expired. Please contact support to renew.")
+                remove_subscription(user_id)
+
+        await asyncio.sleep(3600)
+
 @app.on_message(filters.command("upload") & filters.private)
 async def upload_video(client, message):
     user_id = message.chat.id
@@ -38,13 +84,12 @@ async def upload_video(client, message):
         await client.send_message(user_id, "❌ You do not have an active subscription. Please renew to use this feature.")
         return
 
-    try:
-        command_params = message.text.split(" ")
-        public_channel = command_params[1]
-        private_channel = command_params[2]
-    except IndexError:
+    command_params = message.text.split(" ")
+    if len(command_params) < 3:
         await client.send_message(message.chat.id, "Usage: /upload <public_channel> <private_channel>")
         return
+
+    public_channel, private_channel = command_params[1], command_params[2]
 
     user_states_collection.update_one(
         {"user_id": message.chat.id},
@@ -56,17 +101,6 @@ async def upload_video(client, message):
         upsert=True
     )
     await client.send_message(message.chat.id, "Please send the video message link.")
-
-def is_user_allowed(user_id):
-    subscription = get_subscription(user_id)
-    if not subscription:
-        return False
-
-    start_date = subscription["start_date"]
-    months_subscribed = subscription["months_subscribed"]
-    expiration_date = start_date + timedelta(days=months_subscribed * 30)
-
-    return datetime.now() <= expiration_date
 
 @app.on_message(filters.private)
 async def handle_messages(client, message):
@@ -89,7 +123,7 @@ async def get_video_link(client, message):
         {"user_id": message.chat.id},
         {"$set": {"video_link": video_link, "step": "get_description"}}
     )
-    await client.send_message(message.chat.id, "Please provide a description.")
+    await client.send_message(message.chat.id, "Great! Now please provide a description for the video. Make it engaging to attract viewers!")
 
 async def get_description(client, message):
     description = message.text
@@ -110,7 +144,7 @@ async def get_cover_photo(client, message):
         private_channel = user_state.get("private_channel")
 
         video_id = video_link.split('/')[-1]
-        await post_video_to_channel(public_channel, video_id, description, cover_photo)  # Add 'await' here
+        await post_video_to_channel(public_channel, video_id, description, cover_photo)
 
         video_channels_collection.update_one(
             {"video_id": video_id},
@@ -156,33 +190,15 @@ async def handle_button_click(client, callback_query):
                 file_id = message.document.file_id
                 sent_message = await client.send_document(user_id, file_id)
 
-            await callback_query.answer("ꜰᴇᴛᴄʜɪɴɢ ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ.... ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ", show_alert=True)
-            await client.send_message(user_id, "ᴘʟᴇᴀꜱᴇ ꜰᴏʀᴡᴀʀᴅ ᴛʜɪꜱ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ɪɴ ʏᴏᴜʀ ꜱᴀᴠᴇᴅ ᴍᴇꜱꜱᴀɢᴇꜱ ᴀɴᴅ ᴅᴏᴡɴʟᴏᴀᴅ ᴛʜᴇʀᴇ, ᴛʜᴇ ᴄᴏɴᴛᴇɴᴛ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ .")
+            await callback_query.answer("Fetching your request... Please check your DM.", show_alert=True)
+            await client.send_message(user_id, "Please forward this video or file in your saved messages and download there, the content will be deleted after 5 minutes.")
             await asyncio.sleep(300)
             await client.delete_messages(user_id, sent_message.id)
         else:
-            await callback_query.answer("ᴄᴏɴᴛᴇɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ ᴏʀ ɪᴛꜱ ɴᴏᴛ ᴀ ᴠɪᴅᴇᴏ ᴏʀ ꜰɪʟᴇ ᴍᴇꜱꜱᴀɢᴇ.", show_alert=True)
+            await callback_query.answer("Content not found or it's not a video/file message.", show_alert=True)
     except Exception as e:
-        await callback_query.answer("ꜰᴀɪʟᴇᴅ ᴛᴏ ʀᴇᴛʀɪᴇᴠᴇ ᴄᴏɴᴛᴇɴᴛ, ᴘʟᴇᴀꜱᴇ ᴛʏᴘᴇ /start ᴏɴ ʙᴏᴛ 𝗬ᴜᴍɪ 花 子 ᴅᴍ.", show_alert=True)
-        print(f"Error fetching content: {e}")
-
-async def notify_expiring_subscriptions():
-    while True:
-        for subscription in list(subscriptions_col.find()):
-            user_id = subscription["user_id"]
-            start_date = subscription["start_date"]
-            months_subscribed = subscription["months_subscribed"]
-            expiration_date = start_date + timedelta(days=months_subscribed * 30)
-            time_remaining = expiration_date - datetime.now()
-
-            if timedelta(hours=23) < time_remaining < timedelta(hours=24):
-                await app.send_message(user_id, "⚠️ Your subscription is expiring in 24 hours!")
-
-            if time_remaining <= timedelta(0):
-                await app.send_message(user_id, "❌ Your subscription has expired. Please contact support for renewal.")
-                remove_subscription(user_id)
-
-        await asyncio.sleep(3600)
+        await callback_query.answer("Failed to retrieve content, please try again later.", show_alert=True)
+        logger.error(f"Error fetching content: {e}")
 
 @app.on_message(filters.command("addmmbr") & filters.user(Helpers))
 async def add_member(client, message):
