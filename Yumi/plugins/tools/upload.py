@@ -185,33 +185,29 @@ async def notify_expiring_subscriptions():
         await asyncio.sleep(3600)
 
 @app.on_message(filters.command("addmmbr") & filters.user(Helpers))
-async def add_member(client, message):
+def add_member(client, message):
     try:
         command_params = message.text.split(" ")
         if len(command_params) < 3:
-            await client.send_message(message.chat.id, "Usage: /addmmbr <username/UserID/reply to user> <months>")
+            client.send_message(message.chat.id, "Usage: /addmmbr <username/UserID/reply to user> <months>")
             return
 
         if message.reply_to_message:
             target_user = message.reply_to_message.from_user.id
             target_name = message.reply_to_message.from_user.first_name
         else:
-            if command_params[1].isdigit():
-                target_user = int(command_params[1])
-                target_name = (await client.get_users(target_user)).first_name
-            else:
-                target_user = (await client.get_users(command_params[1])).id
-                target_name = (await client.get_users(target_user)).first_name
+            target_user = int(command_params[1]) if command_params[1].isdigit() else client.get_users(command_params[1]).id
+            target_name = client.get_users(target_user).first_name
 
         months_subscribed = int(command_params[2])
         start_date = datetime.now()
 
         add_subscription(target_user, start_date, months_subscribed)
 
-        await client.send_message(message.chat.id, f"User {target_name} has been added with a {months_subscribed}-month subscription.")
-        await client.send_message(target_user, f"🎉 You have been granted access to the bot for {months_subscribed} month(s).")
+        client.send_message(message.chat.id, f"User {target_name} has been added with a {months_subscribed}-month subscription.")
+        client.send_message(target_user, f"🎉 You have been granted access to the bot for {months_subscribed} month(s).")
     except Exception as e:
-        await client.send_message(message.chat.id, f"Error: {e}")
+        client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("status"))
 def subscription_status(client, message):
