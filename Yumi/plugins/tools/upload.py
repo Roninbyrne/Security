@@ -32,10 +32,10 @@ def remove_subscription(user_id):
     subscriptions_col.delete_one({"user_id": user_id})
 
 @app.on_message(filters.command("upload") & filters.private)
-async def upload_video(client, message):
+def upload_video(client, message):
     user_id = message.chat.id
-    if not await is_user_allowed(user_id):  # Ensure it's awaited properly
-        await client.send_message(user_id, "❌ You do not have an active subscription. Please renew to use this feature.")
+    if not is_user_allowed(user_id):
+        client.send_message(user_id, "❌ You do not have an active subscription. Please renew to use this feature.")
         return
 
     try:
@@ -43,10 +43,10 @@ async def upload_video(client, message):
         public_channel = command_params[1]
         private_channel = command_params[2]
     except IndexError:
-        await client.send_message(message.chat.id, "Usage: /upload <public_channel> <private_channel>")
+        client.send_message(message.chat.id, "Usage: /upload <public_channel> <private_channel>")
         return
 
-    await user_states_collection.update_one(
+    user_states_collection.update_one(
         {"user_id": message.chat.id},
         {"$set": {
             "step": "get_video_link",
@@ -55,9 +55,9 @@ async def upload_video(client, message):
         }},
         upsert=True
     )
-    await client.send_message(message.chat.id, "Please send the video message link.")
+    client.send_message(message.chat.id, "Please send the video message link.")
 
-async def is_user_allowed(user_id):
+def is_user_allowed(user_id):
     subscription = get_subscription(user_id)
     if not subscription:
         return False
@@ -69,7 +69,7 @@ async def is_user_allowed(user_id):
     return datetime.now() <= expiration_date
 
 @app.on_message(filters.private)
-async def handle_messages(client, message):
+def handle_messages(client, message):
     user_id = message.chat.id
     user_state = user_states_collection.find_one({"user_id": user_id})
 
@@ -77,29 +77,29 @@ async def handle_messages(client, message):
         state = user_state.get("step")
 
         if state == "get_video_link":
-            await get_video_link(client, message)
+            get_video_link(client, message)
         elif state == "get_description":
-            await get_description(client, message)
+            get_description(client, message)
         elif state == "get_cover_photo":
-            await get_cover_photo(client, message)
+            get_cover_photo(client, message)
 
-async def get_video_link(client, message):
+def get_video_link(client, message):
     video_link = message.text
-    await user_states_collection.update_one(
+    user_states_collection.update_one(
         {"user_id": message.chat.id},
         {"$set": {"video_link": video_link, "step": "get_description"}}
     )
-    await client.send_message(message.chat.id, "Please provide a description.")
+    client.send_message(message.chat.id, "Please provide a description.")
 
-async def get_description(client, message):
+def get_description(client, message):
     description = message.text
-    await user_states_collection.update_one(
+    user_states_collection.update_one(
         {"user_id": message.chat.id},
         {"$set": {"description": description, "step": "get_cover_photo"}}
     )
-    await client.send_message(message.chat.id, "Please send the cover photo.")
+    client.send_message(message.chat.id, "Please send the cover photo.")
 
-async def get_cover_photo(client, message):
+def get_cover_photo(client, message):
     if message.photo:
         cover_photo = message.photo.file_id
         user_state = user_states_collection.find_one({"user_id": message.chat.id})
@@ -110,9 +110,9 @@ async def get_cover_photo(client, message):
         private_channel = user_state.get("private_channel")
 
         video_id = video_link.split('/')[-1]
-        await post_video_to_channel(public_channel, video_id, description, cover_photo)
+        post_video_to_channel(public_channel, video_id, description, cover_photo)
 
-        await video_channels_collection.update_one(
+        video_channels_collection.update_one(
             {"video_id": video_id},
             {"$set": {
                 "public_channel": public_channel,
@@ -121,12 +121,12 @@ async def get_cover_photo(client, message):
             upsert=True
         )
 
-        await client.send_message(message.chat.id, "Video details uploaded to the public channel!")
+        client.send_message(message.chat.id, "Video details uploaded to the public channel!")
 
-async def post_video_to_channel(public_channel, video_id, description, cover_photo):
+def post_video_to_channel(public_channel, video_id, description, cover_photo):
     button = InlineKeyboardMarkup([[InlineKeyboardButton("✯ ᴅᴏᴡɴʟᴏᴀᴅ ✯", callback_data=video_id)]])
 
-    await app.send_photo(
+    app.send_photo(
         chat_id=public_channel,
         photo=cover_photo,
         caption=f"{description}\n\n❱ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ<a href='https://t.me/phoenixXsupport'> [ ᴄʟɪᴄᴋ ʜᴇʀᴇ ]</a>",
@@ -214,13 +214,13 @@ async def add_member(client, message):
         await client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("status"))
-async def subscription_status(client, message):
+def subscription_status(client, message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     subscription = get_subscription(user_id)
 
     if not subscription:
-        await client.send_message(chat_id, "❌ You do not have an active subscription.")
+        client.send_message(chat_id, "❌ You do not have an active subscription.")
         return
 
     start_date = subscription["start_date"]
@@ -229,7 +229,7 @@ async def subscription_status(client, message):
     time_remaining = expiration_date - datetime.now()
 
     if time_remaining.total_seconds() <= 0:
-        await client.send_message(chat_id, "❌ Your subscription has expired.")
+        client.send_message(chat_id, "❌ Your subscription has expired.")
         return
 
     months_left = time_remaining.days // 30
@@ -244,85 +244,55 @@ async def subscription_status(client, message):
         f"Time Remaining: {months_left} months, {days_left} days, {hours_left} hours, {minutes_left} minutes\n"
     )
 
-    await client.send_message(chat_id, status_message)
+    client.send_message(chat_id, status_message)
 
 @app.on_message(filters.command("rmmbr") & filters.user(Helpers))
-async def remove_member(client, message):
+def remove_member(client, message):
     try:
         command_params = message.text.split(" ")
         if len(command_params) < 2:
-            await client.send_message(message.chat.id, "Usage: /rmmbr <username/UserID>")
+            client.send_message(message.chat.id, "Usage: /rmmbr <username/UserID>")
             return
 
         if message.reply_to_message:
             target_user = message.reply_to_message.from_user.id
             target_name = message.reply_to_message.from_user.first_name
         else:
-            target_user = int(command_params[1]) if command_params[1].isdigit() else (await client.get_users(command_params[1])).id
-            target_name = (await client.get_users(target_user)).first_name
+            target_user = int(command_params[1]) if command_params[1].isdigit() else client.get_users(command_params[1]).id
+            target_name = client.get_users(target_user).first_name
 
         if get_subscription(target_user):
             remove_subscription(target_user)
-            await client.send_message(message.chat.id, f"User {target_name} has been removed from the subscription list.")
-            await client.send_message(target_user, "❌ Your subscription has been manually revoked by an admin.")
+            client.send_message(message.chat.id, f"User {target_name} has been removed from the subscription list.")
+            client.send_message(target_user, "❌ Your subscription has been manually revoked by an admin.")
         else:
-            await client.send_message(message.chat.id, f"User {target_name} is not in the subscription list.")
+            client.send_message(message.chat.id, f"User {target_name} is not in the subscription list.")
     except Exception as e:
-        await client.send_message(message.chat.id, f"Error: {e}")
+        client.send_message(message.chat.id, f"Error: {e}")
 
 @app.on_message(filters.command("mmbrlist") & filters.user(Helpers))
-async def member_list(client, message):
-    try:
-        all_subscriptions = list(subscriptions_col.find())
-        if not all_subscriptions:
-            await client.send_message(message.chat.id, "No members found.")
-            return
+def list_members(client, message):
+    subscribers = list(subscriptions_col.find())
+    if not subscribers:
+        client.send_message(message.chat.id, "No users are currently subscribed.")
+        return
 
-        member_details = "\n".join(
-            [f"User ID: {subscription['user_id']} | Name: {await get_user_name(subscription['user_id'])} | Subscribed: {subscription['months_subscribed']} months"
-             for subscription in all_subscriptions]
-        )
+    member_list = "📝 **Subscribed Users:**\n\n"
+    for subscription in subscribers:
+        user_id = subscription["user_id"]
+        start_date = subscription["start_date"]
+        months_subscribed = subscription["months_subscribed"]
+        expiration_date = start_date + timedelta(days=months_subscribed * 30)
+        time_remaining = expiration_date - datetime.now()
 
-        await client.send_message(message.chat.id, f"Members List:\n\n{member_details}")
-    except Exception as e:
-        await client.send_message(message.chat.id, f"Error: {e}")
+        user_info = client.get_users(user_id)
+        member_list += f"**{user_info.first_name}** (ID: {user_id})\n"
+        member_list += f"Time remaining: {time_remaining.days} days, {time_remaining.seconds // 3600} hours, and {(time_remaining.seconds // 60) % 60} minutes\n\n"
 
-async def get_user_name(user_id):
-    try:
-        user = await app.get_users(user_id)
-        return user.first_name
-    except Exception as e:
-        return f"Unknown (ID: {user_id})"
+    client.send_message(message.chat.id, member_list)
 
-@app.on_message(filters.command("help"))
-async def help_command(client, message):
-    help_text = """
-    Welcome to the Bot! Here are the available commands:
-    
-    /upload <public_channel> <private_channel> - Upload a video to the channels.
-    /status - Check your subscription status.
-    /addmmbr <username/UserID/reply to user> <months> - Add a subscription for a user.
-    /rmmbr <username/UserID/reply to user> - Remove a subscription for a user.
-    /mmbrlist - View all active subscriptions.
-    /help - Get this help message.
-    
-    Contact support for assistance.
-    """
-    await client.send_message(message.chat.id, help_text)
-
-@app.on_message(filters.command("start"))
-async def start_command(client, message):
-    start_message = """
-    Welcome to the bot! To use this bot, you need an active subscription.
-    Type /status to check your subscription, or contact support for assistance.
-    
-    You can use commands like /upload to upload videos and more.
-    Type /help for a full list of commands.
-    """
-    await client.send_message(message.chat.id, start_message)
-
-# Start the background task for notifying users about expiring subscriptions
-app.loop.create_task(notify_expiring_subscriptions())
+async def start_periodic_task():
+    asyncio.create_task(notify_expiring_subscriptions())
 
 if __name__ == "__main__":
-    app.run()
+    app.run(start_periodic_task())
