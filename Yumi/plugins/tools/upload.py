@@ -8,7 +8,6 @@ import time
 import logging
 from config import MONGO_DB_URI, Helpers
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
