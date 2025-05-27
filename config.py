@@ -14,7 +14,7 @@ API_HASH = "6b202043d2b3c4db3f4ebefb06f2df12"
 BOT_TOKEN = "7809892112:AAE7IchNLtg94S_RA9neC8LupL9UO0-8ueQ"
 
 # Get your mongo url from cloud.mongodb.com
-MONGO_DB_URI = "mongodb+srv://Yumi:Yumi@yumi.inctk.mongodb.net/?retryWrites=true&w=majority&appName=Yumi"
+MONGO_DB_URI = "mongodb+srv://Security:Security@yumi.inctk.mongodb.net/?retryWrites=true&w=majority&appName=Security"
 
 DURATION_LIMIT_MIN = int(getenv("DURATION_LIMIT", 60))
 
@@ -35,7 +35,7 @@ HEROKU_API_KEY = getenv("HEROKU_API_KEY")
 
 UPSTREAM_REPO = getenv(
     "UPSTREAM_REPO",
-    "https://github.com/Roninbyrne/Yumi",
+    "https://github.com/Roninbyrne/Security",
 )
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "main")
 GIT_TOKEN = getenv(
