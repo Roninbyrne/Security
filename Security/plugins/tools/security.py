@@ -1,84 +1,91 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ChatMemberStatus
 from Security import app
+from config import OWNER_ID
 from pymongo import MongoClient
-from config import MONGO_DB_URI, OWNER_ID
-from datetime import datetime, timedelta
-import random
+from config import MONGO_DB_URI
 
 mongo_client = MongoClient(MONGO_DB_URI)
 db = mongo_client.security
 settings_collection = db.settings
 security_col = db.security
 
-MUTE_TIMES = [60, 120, 300, 600, 900, 1800]
+@app.on_callback_query()
+async def callback_handler(client: Client, callback_query: CallbackQuery):
+    data = callback_query.data
+    user_id = callback_query.from_user.id
 
-@app.on_message(filters.group)
-async def enforce_security(client: Client, message: Message):
-    if not message.from_user:
+    if not data.startswith("toggle:"):
         return
 
-    user_id = message.from_user.id
-    group_id = message.chat.id
+    _, security_code, setting_type = data.split(":")
+    group_data = settings_collection.find_one({"security_code": security_code})
+    link_data = security_col.find_one({"security_code": security_code})
 
-    security_data = security_col.find_one({"linked_groups": group_id})
-    if not security_data:
-        return
+    if not group_data or not link_data:
+        return await callback_query.answer("Security settings not found.", show_alert=True)
 
-    security_code = security_data["security_code"]
-    settings = settings_collection.find_one({"security_code": security_code}) or {}
+    group_id = None
+    for gid in link_data.get("linked_groups", []):
+        try:
+            member = await client.get_chat_member(gid, user_id)
+            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+                group_id = gid
+                break
+        except:
+            continue
 
-    if user_id == security_data.get("owner_id") or user_id == OWNER_ID:
-        return
+    if user_id != group_data.get("security_owner") and user_id != group_data.get("group_owner") and user_id != OWNER_ID:
+        if group_id:
+            member = await client.get_chat_member(group_id, user_id)
+            if member.status != ChatMemberStatus.OWNER:
+                return await callback_query.answer("You are not allowed to change these settings.", show_alert=True)
+        else:
+            return await callback_query.answer("You are not allowed to change these settings.", show_alert=True)
 
-    # Copyright Protection: delete edited messages
-    if settings.get("copyright_protection") and message.edit_date:
-        await message.delete()
-        await take_action(client, message, group_id, user_id, "Copyright Edit Detected")
-        return
+    current_value = group_data.get(setting_type, False)
+    new_value = not current_value
 
-    # Link Security
-    if settings.get("link_security") and ("t.me/" in message.text.lower() or "http" in message.text.lower()):
-        await message.delete()
-        await take_action(client, message, group_id, user_id, "Link Sharing")
-        return
+    settings_collection.update_one(
+        {"security_code": security_code},
+        {"$set": {setting_type: new_value}}
+    )
 
-    # Spam Protection
-    if settings.get("spam"):
-        if hasattr(message, "text") and len(set(message.text.lower().split())) <= 3:
-            await message.delete()
-            await take_action(client, message, group_id, user_id, "Spam Detected")
-            return
+    updated_data = settings_collection.find_one({"security_code": security_code})
 
-    # Word Limitation
-    if settings.get("words_limitations") and message.text and len(message.text.split()) > 150:
-        await message.delete()
-        await mute_user(client, group_id, user_id, message)
+    await callback_query.answer(
+        f"{setting_type.replace('_', ' ').title()} {'enabled' if new_value else 'disabled'}.",
+        show_alert=True
+    )
 
-async def take_action(client, message, group_id, user_id, reason):
-    duration = random.choice(MUTE_TIMES)
-    until_date = datetime.utcnow() + timedelta(seconds=duration)
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"Copyright Protection {'🔓' if updated_data.get('copyright_protection', False) else '🔒'}",
+                callback_data=f"toggle:{security_code}:copyright_protection"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"LINK Security {'🔓' if updated_data.get('link_security', False) else '🔒'}",
+                callback_data=f"toggle:{security_code}:link_security"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"Spam {'🔓' if updated_data.get('spam', False) else '🔒'}",
+                callback_data=f"toggle:{security_code}:spam"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"Words Limitations {'🔓' if updated_data.get('words_limitations', False) else '🔒'}",
+                callback_data=f"toggle:{security_code}:words_limitations"
+            )
+        ]
+    ]
 
-    await client.restrict_chat_member(group_id, user_id, permissions=None, until_date=until_date)
-
-    user_mention = message.from_user.mention if message.from_user else str(user_id)
-    await message.reply(f"{user_mention} has been muted for {reason}. Duration: {duration // 60} minutes")
-
-    security_data = security_col.find_one({"linked_groups": group_id})
-    if not security_data:
-        return
-
-    log_channel = security_data.get("log_channel")
-    if not log_channel:
-        return
-
-    text = f"Group: {message.chat.title}\nChat ID: {group_id}\nUser: {user_mention}\nUserID: {user_id}\nUsername: @{message.from_user.username if message.from_user.username else '-'}\nReason: {reason}\nAction: Mute {duration // 60} minutes"
-
-    try:
-        await client.send_message(log_channel, text)
-    except:
-        pass
-
-async def mute_user(client, group_id, user_id, message):
-    reason = "Message too long"
-    await take_action(client, message, group_id, user_id, reason)
+    await callback_query.message.edit_reply_markup(
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
