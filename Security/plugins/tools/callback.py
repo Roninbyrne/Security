@@ -1,72 +1,49 @@
-from pyrogram import Client, filters
+from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from Security import app
-from config import OWNER_ID
+from config import OWNER_ID, MONGO_DB_URI
 from pymongo import MongoClient
-from config import MONGO_DB_URI
 
 mongo_client = MongoClient(MONGO_DB_URI)
-db = mongo_client.security
-settings_collection = db.settings
+db = mongo_client['SecurityBot']
+security_col = db['security']
 
 @app.on_callback_query()
 async def callback_handler(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
 
-    if not data.startswith("toggle:"):
+    if "|" not in data:
         return
 
-    _, security_code, setting_type = data.split(":")
-    group_data = settings_collection.find_one({"security_code": security_code})
+    setting_type, group_id = data.split("|")
+    group_id = int(group_id)
 
-    if not group_data:
-        return await callback_query.answer("Security settings not found.", show_alert=True)
+    security_data = security_col.find_one({"linked_groups": group_id})
+    if not security_data:
+        await callback_query.answer("Security not set up.", show_alert=True)
+        return
 
-    # Only allow the security owner or group owner to toggle settings
-    if user_id != group_data.get("security_owner") and user_id != group_data.get("group_owner") and user_id != OWNER_ID:
-        return await callback_query.answer("You are not allowed to change these settings.", show_alert=True)
+    owner_id = security_data.get("owner_id")
+    if user_id != owner_id and user_id != OWNER_ID:
+        await callback_query.answer("Not authorized.", show_alert=True)
+        return
 
-    current_value = group_data.get(setting_type, False)
+    current_value = security_data.get(setting_type, False)
     new_value = not current_value
 
-    settings_collection.update_one(
-        {"security_code": security_code},
+    security_col.update_one(
+        {"linked_groups": group_id},
         {"$set": {setting_type: new_value}}
     )
 
-    await callback_query.answer(
-        f"{setting_type.replace('_', ' ').title()} {'enabled' if new_value else 'disabled'}.",
-        show_alert=True
-    )
+    updated_data = security_col.find_one({"linked_groups": group_id})
 
-    buttons = [
+    keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                f"Copyright Protection {'🔓' if group_data.get('copyright_protection', False) else '🔒'}",
-                callback_data=f"toggle:{security_code}:copyright_protection"
-            )
-        ],
-        [
+                f"Copyright protection {'🔓' if updated_data.get('copyright', False) else '🔒'}",
+                callback_data=f"copyright|{group_id}"
+            ),
             InlineKeyboardButton(
-                f"LINK Security {'🔓' if group_data.get('link_security', False) else '🔒'}",
-                callback_data=f"toggle:{security_code}:link_security"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                f"Spam {'🔓' if group_data.get('spam', False) else '🔒'}",
-                callback_data=f"toggle:{security_code}:spam"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                f"Words Limitations {'🔓' if group_data.get('words_limitations', False) else '🔒'}",
-                callback_data=f"toggle:{security_code}:words_limitations"
-            )
-        ]
-    ]
-
-    await callback_query.message.edit_reply_markup(
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
+                f
