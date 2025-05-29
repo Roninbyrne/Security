@@ -103,12 +103,16 @@ async def start_game(client, message):
     asyncio.create_task(day_night_cycle(chat_id, game_id))
 
     for pid in players:
+    try:
+        await client.send_message(pid,
+            "🎭 Game started! Press below to reveal your role and manage coins.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
+                                              [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]]))
+    except Exception:
         try:
-            await client.send_message(pid,
-                "🎭 Game started! Press below to reveal your role and manage coins.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
-                                                  [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]]))
-        except Exception:
+            user = await client.get_users(pid)
+            await client.send_message(chat_id, f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.", parse_mode="markdown")
+        except:
             pass
 
 @app.on_callback_query(filters.regex(r"join_"))
@@ -236,5 +240,17 @@ async def stop_game(client, message):
     await reset_game(chat_id)
     await message.reply("🛑 Game stopped by admin.")
 
-if __name__ == "main":
+@app.on_message(filters.group & filters.text & ~filters.service)
+async def suppress_messages_at_night(client, message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+
+    game = games_col.find_one({"chat_id": chat_id, "active": True})
+    if not game or game.get("phase") != "started":
+        return
+
+    if game.get("day_night") == "night":
+        await message.delete()
+
+if __name__ == "__main__":
     app.run()
