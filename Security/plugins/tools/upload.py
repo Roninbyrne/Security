@@ -1,132 +1,168 @@
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pymongo import MongoClient
-from datetime import datetime, timedelta
-import asyncio
-import random
-import logging
-from config import MONGO_DB_URI, API_ID, API_HASH, BOT_TOKEN
+from pyrogram import Client, filters from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton from pymongo import MongoClient from datetime import datetime, timedelta import asyncio import random import logging from config import MONGO_DB_URI, API_ID, API_HASH, BOT_TOKEN
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO) logger = logging.getLogger(name)
 
 app = Client("werewolf_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-mongo_client = MongoClient(MONGO_DB_URI)
-db = mongo_client["werewolf_bot"]
-games_col = db.games
-players_col = db.players
+mongo_client = MongoClient(MONGO_DB_URI) db = mongo_client["werewolf_bot"] games_col = db.games players_col = db.players
 
-JOIN_TIME = 40
-MIN_PLAYERS = 6
-MAX_PLAYERS = 16
+JOIN_TIME = 40 MIN_PLAYERS = 6 MAX_PLAYERS = 16
 
-ROLE_WEREWOLF = "werewolf"
-ROLE_VILLAGER = "villager"
+ROLE_WEREWOLF = "werewolf" ROLE_VILLAGER = "villager"
 
-POWER_COSTS = {
-    "disguise": 5,
+POWER_COSTS = { "disguise": 5, }
+
+async def reset_game(chat_id): games_col.update_one({"chat_id": chat_id, "active": True}, {"$set": {"active": False, "phase": "stopped"}}) players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "coins": ""}})
+
+def generate_roles(num): werewolves = max(1, num // 4) villagers = num - werewolves roles = [ROLE_WEREWOLF] * werewolves + [ROLE_VILLAGER] * villagers random.shuffle(roles) return roles
+
+async def give_coins(player_id, amount): player = players_col.find_one({"_id": player_id}) if not player: players_col.insert_one({"_id": player_id, "coins": amount}) else: players_col.update_one({"_id": player_id}, {"$inc": {"coins": amount}})
+
+def get_coins(player_id): player = players_col.find_one({"_id": player_id}) return player.get("coins", 0) if player else 0
+
+@app.on_message(filters.command("startgame") & filters.group) async def start_game(client, message): chat_id = message.chat.id if games_col.find_one({"chat_id": chat_id, "active": True}): await message.reply("❌ Game already running. Use /stopgame to stop.") return
+
+game_data = {
+    "chat_id": chat_id,
+    "active": True,
+    "players": [],
+    "phase": "lobby",
+    "start_time": datetime.utcnow(),
 }
+game_id = games_col.insert_one(game_data).inserted_id
 
-async def reset_game(chat_id):
-    games_col.update_one({"chat_id": chat_id, "active": True}, {"$set": {"active": False, "phase": "stopped"}})
-    players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "coins": ""}})
+keyboard = InlineKeyboardMarkup(
+    [[InlineKeyboardButton("📝 Join Game", callback_data=f"join_{game_id}")]]
+)
+await message.reply(f"🎲 Game started! Join in {JOIN_TIME} seconds (min {MIN_PLAYERS}, max {MAX_PLAYERS}).", reply_markup=keyboard)
 
-def generate_roles(num):
-    werewolves = max(1, num // 4)
-    villagers = num - werewolves
-    roles = [ROLE_WEREWOLF] * werewolves + [ROLE_VILLAGER] * villagers
-    random.shuffle(roles)
-    return roles
+await asyncio.sleep(JOIN_TIME)
 
-async def give_coins(player_id, amount):
-    player = players_col.find_one({"_id": player_id})
-    if not player:
-        players_col.insert_one({"_id": player_id, "coins": amount})
-    else:
-        players_col.update_one({"_id": player_id}, {"$inc": {"coins": amount}})
+game = games_col.find_one({"_id": game_id})
+players = game.get("players", [])
 
-def get_coins(player_id):
-    player = players_col.find_one({"_id": player_id})
-    return player.get("coins", 0) if player else 0
+if len(players) < MIN_PLAYERS:
+    games_col.update_one({"_id": game_id}, {"$set": {"active": False, "phase": "cancelled"}})
+    await client.send_message(chat_id, f"❌ Not enough players ({len(players)}/{MIN_PLAYERS}). Game cancelled.")
+    return
 
-@app.on_message(filters.command("startgame") & filters.group)
-async def start_game(client, message):
-    chat_id = message.chat.id
-    if games_col.find_one({"chat_id": chat_id, "active": True}):
-        await message.reply("❌ Game already running. Use /stopgame to stop.")
-        return
+roles = generate_roles(len(players))
 
-    game_data = {
-        "chat_id": chat_id,
-        "active": True,
-        "players": [],
-        "phase": "lobby",
-        "start_time": datetime.utcnow(),
-        "night_duration": timedelta(minutes=2),
-        "day_duration": timedelta(minutes=5),
-        "votes": {},
-        "lynch_target": None,
-    }
-    game_id = games_col.insert_one(game_data).inserted_id
+for pid, role in zip(players, roles):
+    players_col.update_one({"_id": pid}, {"$set": {"role": role, "game_id": game_id, "game_chat": chat_id, "coins": 10, "disguised": False}}, upsert=True)
 
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("📝 Join Game", callback_data=f"join_{game_id}")]]
-    )
-    await message.reply(f"🎲 Game started! Join in {JOIN_TIME} seconds (min {MIN_PLAYERS}, max {MAX_PLAYERS}).", reply_markup=keyboard)
+games_col.update_one({"_id": game_id}, {"$set": {"phase": "started"}})
+await client.send_message(chat_id, f"✅ Game started with {len(players)} players!")
 
-    await asyncio.sleep(JOIN_TIME)
+for pid in players:
+    try:
+        await client.send_message(pid,
+            "🎭 Game started! Press below to reveal your role and manage coins.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
+                                              [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]]))
+    except Exception:
+        pass
 
-    game = games_col.find_one({"_id": game_id})
-    players = game.get("players", [])
+@app.on_callback_query(filters.regex(r"join_")) async def join_game(client, callback): user_id = callback.from_user.id game_id = callback.data.split("_")[1]
 
-    if len(players) < MIN_PLAYERS:
-        games_col.update_one({"_id": game_id}, {"$set": {"active": False, "phase": "cancelled"}})
-        await client.send_message(chat_id, f"❌ Not enough players ({len(players)}/{MIN_PLAYERS}). Game cancelled.")
-        return
+from bson import ObjectId
+game_id = ObjectId(game_id)
 
-    roles = generate_roles(len(players))
+game = games_col.find_one({"_id": game_id})
+if not game or not game.get("active") or game.get("phase") != "lobby":
+    await callback.answer("❌ Not accepting joins.", show_alert=True)
+    return
 
-    for pid, role in zip(players, roles):
-        players_col.update_one({"_id": pid}, {"$set": {"role": role, "game_id": game_id, "game_chat": chat_id, "coins": 10, "disguised": False}}, upsert=True)
+players = game.get("players", [])
+if user_id in players:
+    await callback.answer("✅ Already joined.")
+    return
 
-    games_col.update_one({"_id": game_id}, {"$set": {"phase": "night"}})
-    await client.send_message(chat_id, f"🌙 Night phase begins! Werewolves, choose your victim.")
+if len(players) >= MAX_PLAYERS:
+    await callback.answer("❌ Game full.")
+    return
 
-    await asyncio.sleep(game["night_duration"].total_seconds())
+players.append(user_id)
+games_col.update_one({"_id": game_id}, {"$set": {"players": players}})
+await callback.answer(f"✅ Joined! Total: {len(players)}")
 
-    game = games_col.find_one({"_id": game_id})
-    if game["phase"] == "night":
-        games_col.update_one({"_id": game_id}, {"$set": {"phase": "day"}})
-        await client.send_message(chat_id, f"🌞 Day phase begins! Discuss and vote to lynch a player.")
+@app.on_callback_query(filters.regex(r"reveal_")) async def reveal_role(client, callback): user_id = callback.from_user.id game_id = callback.data.split("_")[1] from bson import ObjectId game_id = ObjectId(game_id)
 
-        await asyncio.sleep(game["day_duration"].total_seconds())
+player = players_col.find_one({"_id": user_id, "game_id": game_id})
+if not player:
+    await callback.answer("❌ Not in this game.", show_alert=True)
+    return
 
-        game = games_col.find_one({"_id": game_id})
-        if game["phase"] == "day":
-            games_col.update_one({"_id": game_id}, {"$set": {"phase": "voting"}})
-            await client.send_message(chat_id, f"🗳️ Voting phase begins! Vote to lynch a player.")
+role = player.get("role", "Unknown").capitalize()
+coins = player.get("coins", 0)
+disguised = player.get("disguised", False)
 
-            # Implement voting logic here
+text = f"🎭 Role: *{role}*\n💰 Coins: {coins}\n"
+if disguised:
+    text += "🕵️‍♂️ You are currently disguised.\n"
 
-            games_col.update_one({"_id": game_id}, {"$set": {"phase": "night"}})
-            await client.send_message(chat_id, f"🌙 Night phase begins! Werewolves, choose your victim.")
+await callback.answer()
+await callback.message.edit_text(text, parse_mode="markdown",
+                                reply_markup=InlineKeyboardMarkup([
+                                    [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")],
+                                    [InlineKeyboardButton("Toggle Disguise (5 coins)", callback_data=f"disguise_{game_id}")]
+                                ]))
 
-            await asyncio.sleep(game["night_duration"].total_seconds())
+@app.on_callback_query(filters.regex(r"shop_")) async def coin_shop(client, callback): game_id = callback.data.split("_")[1] from bson import ObjectId game_id = ObjectId(game_id)
 
-            game = games_col.find_one({"_id": game_id})
-            if game["phase"] == "night":
-                games_col.update_one({"_id": game_id}, {"$set": {"phase": "day"}})
-                await client.send_message(chat_id, f"🌞 Day phase begins! Discuss and vote to lynch a player.")
+user_id = callback.from_user.id
+player = players_col.find_one({"_id": user_id, "game_id": game_id})
+if not player:
+    await callback.answer("❌ Not in game.", show_alert=True)
+    return
 
-                await asyncio.sleep(game["day_duration"].total_seconds())
+coins = player.get("coins", 0)
 
-                # Repeat the cycle
+buttons = []
+for power, cost in POWER_COSTS.items():
+    buttons.append([InlineKeyboardButton(f"Buy {power.capitalize()} - {cost} coins", callback_data=f"buy_{power}_{game_id}")])
 
-@app.on_callback_query(filters.regex(r"join_"))
-async def join_game(client, callback):
-    user_id = callback.from_user.id
-    game_id = callback.data.split("_")[1]
+await callback.answer()
+await callback.message.edit_text(f"💰 You have {coins} coins.\nChoose a power to buy/use:", reply_markup=InlineKeyboardMarkup(buttons))
 
-    from bson import ObjectId
-    game_id =32
+@app.on_callback_query(filters.regex(r"buy_")) async def buy_power(client, callback): data = callback.data.split("_") power = data[1] game_id = data[2]
+
+from bson import ObjectId
+game_id = ObjectId(game_id)
+user_id = callback.from_user.id
+
+player = players_col.find_one({"_id": user_id, "game_id": game_id})
+if not player:
+    await callback.answer("❌ Not in game.", show_alert=True)
+    return
+
+coins = player.get("coins", 0)
+cost = POWER_COSTS.get(power, None)
+if cost is None:
+    await callback.answer("❌ Invalid power.", show_alert=True)
+    return
+
+if coins < cost:
+    await callback.answer("❌ Not enough coins.", show_alert=True)
+    return
+
+if power == "disguise":
+    disguised = player.get("disguised", False)
+    new_state = not disguised
+    players_col.update_one({"_id": user_id}, {"$set": {"disguised": new_state}, "$inc": {"coins": -cost}})
+    state_text = "enabled" if new_state else "disabled"
+    await callback.answer(f"🕵️‍♂️ Disguise {state_text}! Coins deducted.", show_alert=True)
+    await callback.message.edit_text(f"Disguise {state_text}.", reply_markup=None)
+    return
+
+await callback.answer("❌ Power not implemented.", show_alert=True)
+
+@app.on_message(filters.command("stopgame") & filters.group) async def stop_game(client, message): chat_id = message.chat.id game = games_col.find_one({"chat_id": chat_id, "active": True}) if not game: await message.reply("❌ No active game.") return
+
+await reset_game(chat_id)
+await message.reply("🛑 Game stopped by admin.")
+
+if name == "main": app.run()
+
+yeah in code add day night cycle
+
