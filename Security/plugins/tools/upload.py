@@ -103,25 +103,25 @@ async def start_game(client, message):
     asyncio.create_task(day_night_cycle(chat_id, game_id))
 
     for pid in players:
-    try:
-        await client.send_message(
-            pid,
-            "🎭 Game started! Press below to reveal your role and manage coins.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
-                [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]
-            ])
-        )
-    except Exception:
         try:
-            user = await client.get_users(pid)
             await client.send_message(
-                chat_id,
-                f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.",
-                parse_mode="markdown"
+                pid,
+                "🎭 Game started! Press below to reveal your role and manage coins.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
+                    [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]
+                ])
             )
-        except:
-            pass
+        except Exception:
+            try:
+                user = await client.get_users(pid)
+                await client.send_message(
+                    chat_id,
+                    f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.",
+                    parse_mode="markdown"
+                )
+            except:
+                pass
 
 @app.on_callback_query(filters.regex(r"join_"))
 async def join_game(client, callback):
