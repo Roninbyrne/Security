@@ -16,8 +16,8 @@ db = mongo_client["werewolf_bot"]
 games_col = db.games
 players_col = db.players
 
-JOIN_TIME = 40
-MIN_PLAYERS = 6
+JOIN_TIME = 60
+MIN_PLAYERS = 4
 MAX_PLAYERS = 16
 
 ROLE_WEREWOLF = "werewolf"
