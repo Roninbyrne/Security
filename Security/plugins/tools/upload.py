@@ -57,7 +57,7 @@ async def day_night_cycle(chat_id, game_id):
         current_phase = game.get("day_night", "day")
         next_phase = "night" if current_phase == "day" else "day"
         games_col.update_one({"_id": game_id}, {"$set": {"day_night": next_phase}})
-        await app.send_message(chat_id, f"🌗 It's now *{next_phase.upper()}* time!", parse_mode="markdown")
+        await app.send_message(chat_id, f"🌗 It's now *{next_phase.upper()}* time!", parse_mode="Markdown")
         await asyncio.sleep(60)
 
 @app.on_message(filters.command("startgame") & filters.group)
@@ -118,7 +118,7 @@ async def start_game(client, message):
                 await client.send_message(
                     chat_id,
                     f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.",
-                    parse_mode="markdown"
+                    parse_mode="Markdown"
                 )
             except:
                 pass
@@ -169,7 +169,7 @@ async def reveal_role(client, callback):
         text += "🕵️‍♂️ You are currently disguised.\n"
 
     await callback.answer()
-    await callback.message.edit_text(text, parse_mode="markdown",
+    await callback.message.edit_text(text, parse_mode="Markdown",
                                     reply_markup=InlineKeyboardMarkup([
                                         [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")],
                                         [InlineKeyboardButton("Toggle Disguise (5 coins)", callback_data=f"disguise_{game_id}")]
