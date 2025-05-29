@@ -1,6 +1,7 @@
 from pyrogram import Client, filters
 from Security import app
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 import asyncio
@@ -68,7 +69,7 @@ async def day_night_cycle(chat_id, game_id):
         current_phase = game.get("day_night", "day")
         next_phase = "night" if current_phase == "day" else "day"
         games_col.update_one({"_id": game_id}, {"$set": {"day_night": next_phase}})
-        await app.send_message(chat_id, f"🌗 It's now *{next_phase.upper()}* time!", parse_mode="Markdown")
+        await app.send_message(chat_id, f"🌗 It's now *{next_phase.upper()}* time!", parse_mode=ParseMode.MARKDOWN)
         await asyncio.sleep(60)
 
 @app.on_message(filters.command("startgame") & filters.group)
@@ -118,7 +119,7 @@ async def start_game(client, message):
     await client.send_message(
         chat_id,
         f"✅ Game started with {len(players)} players!\n" + "\n".join(player_lines),
-        parse_mode="Markdown",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("CHECK UR ROLE", callback_data=f"bulkrole_{game_id}")]])
     )
 
@@ -140,7 +141,7 @@ async def start_game(client, message):
                 await client.send_message(
                     chat_id,
                     f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.",
-                    parse_mode="Markdown"
+                    parse_mode=ParseMode.MARKDOWN
                 )
             except:
                 pass
@@ -191,7 +192,7 @@ async def reveal_role(client, callback):
         text += "🕵️‍♂️ You are currently disguised.\n"
 
     await callback.answer()
-    await callback.message.edit_text(text, parse_mode="Markdown",
+    await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN,
                                     reply_markup=InlineKeyboardMarkup([
                                         [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")],
                                         [InlineKeyboardButton("Toggle Disguise (5 coins)", callback_data=f"disguise_{game_id}")]
