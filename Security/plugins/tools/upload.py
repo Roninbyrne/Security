@@ -104,14 +104,22 @@ async def start_game(client, message):
 
     for pid in players:
     try:
-        await client.send_message(pid,
+        await client.send_message(
+            pid,
             "🎭 Game started! Press below to reveal your role and manage coins.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
-                                              [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]]))
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Reveal Role", callback_data=f"reveal_{game_id}")],
+                [InlineKeyboardButton("Coin Shop", callback_data=f"shop_{game_id}")]
+            ])
+        )
     except Exception:
         try:
             user = await client.get_users(pid)
-            await client.send_message(chat_id, f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.", parse_mode="markdown")
+            await client.send_message(
+                chat_id,
+                f"⚠️ Couldn't DM [{user.first_name}](tg://user?id={pid}). Ask them to start the bot in private chat.",
+                parse_mode="markdown"
+            )
         except:
             pass
 
