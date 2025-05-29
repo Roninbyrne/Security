@@ -75,8 +75,11 @@ async def night_phase_logic(chat_id, game_id):
             await app.send_message(uid, "🩸 Alpha Werewolf: Choose TWO players to bite.", reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton(pl.get("name", str(pl["_id"])), callback_data=f"alpha_bite_{pl['_id']}")] for pl in players if pl["_id"] != uid]
             ))
-        elif role in [ROLE_WEREWOLF]:
-            await send_dm(uid, "🌙 Night phase: Select a player to kill.", "kill")
+        elif role == ROLE_WEREWOLF:
+            non_werewolves = [pl for pl in players if pl["role"] not in [ROLE_WEREWOLF, ROLE_ALPHA]]
+            await app.send_message(uid, f"🌙 Night phase:\nDiscuss with your clan.\n\nTargets:\n" + "\n".join([pl.get("name", str(pl["_id"])) for pl in non_werewolves]), reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton(pl.get("name", str(pl["_id"])), callback_data=f"target_wvote_{pl['_id']}")] for pl in non_werewolves]
+            ))
         elif role == ROLE_DOCTOR:
             await send_dm(uid, "🌙 Night phase: Select a player to heal.", "heal")
         elif role == ROLE_SPY:
@@ -84,18 +87,34 @@ async def night_phase_logic(chat_id, game_id):
 
 async def day_phase_logic(chat_id, game_id):
     actions = list(actions_col.find({"chat_id": chat_id}))
-    kills = [a["target_id"] for a in actions if a["action"] == "kill"]
     heals = [a["target_id"] for a in actions if a["action"] == "heal"]
     spys = [a for a in actions if a["action"] == "spy"]
     bites = [a for a in actions if a["action"] == "bite"]
 
-    victim = max(set(kills), key=kills.count) if kills else None
-    if victim and victim not in heals:
-        players_col.delete_one({"_id": victim})
-        user = await app.get_users(victim)
-        await app.send_message(chat_id, f"☠️ {user.first_name} was killed during the night.")
-    else:
-        await app.send_message(chat_id, "😴 No one was killed last night.")
+    wvotes = [a["target_id"] for a in actions if a["action"] == "wvote"]
+    victim = max(set(wvotes), key=wvotes.count) if wvotes else None
+    count = wvotes.count(victim)
+    vote_counts = {v: wvotes.count(v) for v in set(wvotes)}
+    top_votes = [v for v, c in vote_counts.items() if c == count]
+    if len(top_votes) > 1:
+        await app.send_message(chat_id, "💥 Villagers kicked off werewolf ass! The vote was indecisive.")
+    elif victim:
+        victim = int(victim)
+        target = players_col.find_one({"_id": victim})
+        role = target.get("role")
+        if victim not in heals:
+            if role == ROLE_ALPHA:
+                players_col.delete_one({"_id": victim})
+                user = await app.get_users(victim)
+                await app.send_message(chat_id, f"☠️ A tragedy! Alpha {user.first_name} was executed by his own clan!")
+            elif role in [ROLE_VILLAGER, ROLE_DOCTOR, ROLE_SPY]:
+                players_col.delete_one({"_id": victim})
+                user = await app.get_users(victim)
+                await app.send_message(chat_id, f"☠️ {user.first_name} ({role}) has been killed by werewolves last night.")
+            else:
+                await app.send_message(chat_id, "😴 No one was killed last night.")
+        else:
+            await app.send_message(chat_id, "😴 No one was killed last night.")
 
     for bite_group in [bites[i:i+2] for i in range(0, len(bites), 2)]:
         if len(bite_group) == 2:
@@ -114,102 +133,12 @@ async def day_phase_logic(chat_id, game_id):
         target = players_col.find_one({"_id": spy_action["target_id"]})
         role = target.get("role", "Unknown")
         try:
-            await app.send_message(spy_action["user_id"], f"🕵️ You spied on {target.get('name', 'a player')}.\n\nRole: {role.capitalize()}")
+            await app.send_message(spy_action["user_id"], f"🕵️ You spied on {target.get('name', 'a player')}.
+\nRole: {role.capitalize()}")
         except:
             pass
 
     await voting_phase(chat_id, game_id)
-
-async def voting_phase(chat_id, game_id):
-    players = list(players_col.find({"game_id": game_id}))
-    buttons = [[InlineKeyboardButton(f"{p.get('name', str(p['id']))}", callback_data=f"vote{p['_id']}")] for p in players]
-    buttons.append([InlineKeyboardButton("Skip Vote", callback_data="vote_skip")])
-    msg = await app.send_message(chat_id, "🗳️ Day Vote: Choose who to eliminate.", reply_markup=InlineKeyboardMarkup(buttons))
-    await asyncio.sleep(60)
-
-    votes = list(actions_col.find({"chat_id": chat_id, "action": "vote"}))
-    vote_counts = {}
-    for v in votes:
-        vote_counts[v["target_id"]] = vote_counts.get(v["target_id"], 0) + 1
-
-    if vote_counts:
-        target = max(vote_counts, key=vote_counts.get)
-        if target != "skip":
-            players_col.delete_one({"_id": int(target)})
-            user = await app.get_users(int(target))
-            await app.send_message(chat_id, f"⚖️ {user.first_name} was lynched by vote.")
-        else:
-            await app.send_message(chat_id, "⚖️ No one was lynched today.")
-    else:
-        await app.send_message(chat_id, "⚖️ No votes received. No one lynched.")
-
-    await check_win_condition(chat_id, game_id)
-
-def count_roles(game_id):
-    players = list(players_col.find({"game_id": game_id}))
-    role_counts = {ROLE_WEREWOLF: 0, ROLE_ALPHA: 0, ROLE_VILLAGER: 0}
-    for p in players:
-        role = p.get("role")
-        if role in role_counts:
-            role_counts[role] += 1
-    return role_counts
-
-async def check_win_condition(chat_id, game_id):
-    counts = count_roles(game_id)
-    if counts[ROLE_WEREWOLF] + counts[ROLE_ALPHA] == 0:
-        await app.send_message(chat_id, "🎉 Villagers win! All werewolves eliminated.")
-        await reset_game(chat_id)
-    elif counts[ROLE_WEREWOLF] + counts[ROLE_ALPHA] >= counts[ROLE_VILLAGER]:
-        await app.send_message(chat_id, "🐺 Werewolves win! They outnumber the villagers.")
-        await reset_game(chat_id)
-
-async def send_dm(user_id, text, action_type):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Select Target", callback_data=f"action_{action_type}")]
-    ])
-    try:
-        await app.send_message(user_id, text, reply_markup=keyboard)
-    except:
-        pass
-
-@app.on_callback_query(filters.regex(r"action_(kill|heal|spy)"))
-async def action_handler(client, callback):
-    action = callback.data.split("_")[1]
-    user_id = callback.from_user.id
-    player = players_col.find_one({"_id": user_id})
-    game_id = player.get("game_id")
-    chat_id = player.get("game_chat")
-    others = list(players_col.find({"game_id": game_id, "id": {"$ne": user_id}}))
-    buttons = [[InlineKeyboardButton(p.get("name", str(p["id"])), callback_data=f"target_{action}_{p['_id']}")] for p in others]
-    await callback.message.edit_text("Select your target:", reply_markup=InlineKeyboardMarkup(buttons))
-
-@app.on_callback_query(filters.regex(r"target_(kill|heal|spy|vote)_(\d+)"))
-async def target_handler(client, callback):
-    _, action, target_id = callback.data.split("_")
-    user_id = callback.from_user.id
-    player = players_col.find_one({"_id": user_id})
-    chat_id = player.get("game_chat")
-    existing = actions_col.find_one({"chat_id": chat_id, "user_id": user_id, "action": action})
-    if existing:
-        actions_col.update_one({"_id": existing["_id"]}, {"$set": {"target_id": target_id}})
-    else:
-        actions_col.insert_one({"chat_id": chat_id, "user_id": user_id, "action": action, "target_id": target_id})
-    await callback.answer("✅ Action submitted.", show_alert=True)
-    await callback.message.delete()
-
-@app.on_callback_query(filters.regex(r"alpha_bite_(\d+)"))
-async def alpha_bite_handler(client, callback):
-    user_id = callback.from_user.id
-    target_id = int(callback.data.split("_")[2])
-    player = players_col.find_one({"_id": user_id})
-    chat_id = player.get("game_chat")
-    existing = actions_col.find({"chat_id": chat_id, "user_id": user_id, "action": "bite"}).count()
-    if existing < 2:
-        actions_col.insert_one({"chat_id": chat_id, "user_id": user_id, "action": "bite", "target_id": target_id})
-        await callback.answer("✅ Bite target selected.", show_alert=True)
-    else:
-        await callback.answer("❌ You have already selected 2 targets.", show_alert=True)
-    await callback.message.delete()
 
 
 @app.on_message(filters.command("startgame") & filters.group)
