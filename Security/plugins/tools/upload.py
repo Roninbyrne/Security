@@ -30,7 +30,7 @@ ROLE_SPY = "spy"
 
 async def reset_game(chat_id):
     games_col.update_one({"chat_id": chat_id, "active": True}, {"$set": {"active": False, "phase": "stopped"}})
-    players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "healed_times": ""}})
+    players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "healed_times": "", "spy_once_used": ""}})
     actions_col.delete_many({"chat_id": chat_id})
 
 def generate_roles(num):
@@ -68,6 +68,33 @@ async def day_night_cycle(chat_id, game_id):
 async def night_phase_logic(chat_id, game_id):
     actions_col.delete_many({"chat_id": chat_id})
     players = list(players_col.find({"game_id": game_id}))
+    werewolves = [p for p in players if p.get("role") in [ROLE_WEREWOLF, ROLE_ALPHA]]
+    innocents = [p for p in players if p.get("role") in [ROLE_VILLAGER, ROLE_DOCTOR]]
+
+    spy = next((p for p in players if p.get("role") == ROLE_SPY), None)
+    if spy:
+        spy_id = spy["_id"]
+        spy_name = spy.get("name", "Spy")
+        spy_once_used = spy.get("spy_once_used", False)
+        show_self = not spy_once_used and random.random() < 0.5
+
+        reveal_list = []
+
+        if show_self:
+            reveal_list.append(spy)
+            players_col.update_one({"_id": spy_id}, {"$set": {"spy_once_used": True}})
+        else:
+            reveal_list.extend(random.sample(innocents, min(2, len(innocents))))
+
+        other_werewolves = [w for w in werewolves if w.get("role") == ROLE_WEREWOLF]
+        if other_werewolves:
+            reveal_list.append(random.choice(other_werewolves))
+
+        if len(reveal_list) == 3:
+            random.shuffle(reveal_list)
+            names = " | ".join([pl.get("name", str(pl["_id"])) for pl in reveal_list])
+            await app.send_message(chat_id, f"🕵️ {names}\nSpy {spy_name} confirmed that one of them is a werewolf. Choose your vote wisely.")
+
     for p in players:
         role = p.get("role")
         uid = p["_id"]
@@ -82,8 +109,6 @@ async def night_phase_logic(chat_id, game_id):
             ))
         elif role == ROLE_DOCTOR:
             await send_dm(uid, "🌙 Night phase: Select a player to heal.", "heal")
-        elif role == ROLE_SPY:
-            await send_dm(uid, "🌙 Night phase: Select a player to inspect.", "spy")
 
 async def day_phase_logic(chat_id, game_id):
     actions = list(actions_col.find({"chat_id": chat_id}))
@@ -138,6 +163,11 @@ async def day_phase_logic(chat_id, game_id):
             await app.send_message(spy_action["user_id"], f"🕵️ You spied on {target.get('name', 'a player')}\n\nRole: {role.capitalize()}")
         except:
             pass
+
+    spy = next((p for p in players_col.find({"game_id": game_id, "role": ROLE_SPY})), None)
+    if spy:
+        if players_col.count_documents({"game_id": game_id, "role": ROLE_SPY}) == 0:
+            await app.send_message(chat_id, "🕵️ You've lost a great ally. The spy is no longer with you.")
 
     await voting_phase(chat_id, game_id)
 
@@ -245,8 +275,6 @@ async def alpha_bite_handler(client, callback):
     else:
         await callback.answer("❌ You have already selected 2 targets.", show_alert=True)
     await callback.message.delete()
-
-
 
 @app.on_message(filters.command("startgame") & filters.group)
 async def start_game(client, message):
