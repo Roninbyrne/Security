@@ -109,7 +109,18 @@ async def start_game(client, message):
         players_col.update_one({"_id": pid}, {"$set": {"role": role, "game_id": game_id, "game_chat": chat_id, "coins": 10, "disguised": False}}, upsert=True)
 
     games_col.update_one({"_id": game_id}, {"$set": {"phase": "started"}})
-    await client.send_message(chat_id, f"✅ Game started with {len(players)} players!\n" + "\n".join([f"{i+1}. [{await client.get_users(pid).first_name}](tg://user?id={pid})" for i, pid in enumerate(players)]), parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("CHECK UR ROLE", callback_data=f"bulkrole_{game_id}")]]))
+
+    player_lines = []
+    for i, pid in enumerate(players):
+        user = await client.get_users(pid)
+        player_lines.append(f"{i+1}. [{user.first_name}](tg://user?id={pid})")
+
+    await client.send_message(
+        chat_id,
+        f"✅ Game started with {len(players)} players!\n" + "\n".join(player_lines),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("CHECK UR ROLE", callback_data=f"bulkrole_{game_id}")]])
+    )
 
     asyncio.create_task(day_night_cycle(chat_id, game_id))
 
