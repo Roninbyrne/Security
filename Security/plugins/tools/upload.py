@@ -28,21 +28,13 @@ ROLE_ALPHA = "alpha"
 ROLE_DOCTOR = "doctor"
 ROLE_SPY = "spy"
 
-async def reset_game(chat_id):
-    games_col.update_one({"chat_id": chat_id, "active": True}, {"$set": {"active": False, "phase": "stopped"}})
-    players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "healed_times": ""}})
-    actions_col.delete_many({"chat_id": chat_id})
-
 def generate_roles(num):
     roles = []
     if num >= 8:
-        roles.append(ROLE_ALPHA)
-        roles.append(ROLE_DOCTOR)
-        roles.append(ROLE_SPY)
+        roles += [ROLE_ALPHA, ROLE_DOCTOR, ROLE_SPY]
         werewolves = max(1, (num - 3) // 4)
         villagers = num - (werewolves + 3)
-        roles.extend([ROLE_WEREWOLF] * werewolves)
-        roles.extend([ROLE_VILLAGER] * villagers)
+        roles += [ROLE_WEREWOLF] * werewolves + [ROLE_VILLAGER] * villagers
     else:
         werewolves = max(1, num // 4)
         villagers = num - werewolves
@@ -50,22 +42,31 @@ def generate_roles(num):
     random.shuffle(roles)
     return roles
 
+async def send_dm(user_id, text, action_type=None):
+    try:
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Select Target", callback_data=f"action_{action_type}")]]) if action_type else None
+        await app.send_message(user_id, text, reply_markup=keyboard)
+    except:
+        pass
+
+async def reset_game(chat_id):
+    games_col.update_one({"chat_id": chat_id, "active": True}, {"$set": {"active": False, "phase": "stopped"}})
+    players_col.update_many({"game_chat": chat_id}, {"$unset": {"role": "", "game_id": "", "disguised": "", "healed_times": ""}})
+    actions_col.delete_many({"chat_id": chat_id})
+
 async def day_night_cycle(chat_id, game_id):
     while True:
         game = games_col.find_one({"_id": game_id, "active": True})
         if not game:
             break
-
         current_phase = game.get("day_night", "day")
         next_phase = "night" if current_phase == "day" else "day"
         games_col.update_one({"_id": game_id}, {"$set": {"day_night": next_phase}})
         await app.send_message(chat_id, f"🌗 It's now *{next_phase.upper()}* time!", parse_mode=ParseMode.MARKDOWN)
-
         if next_phase == "night":
             await night_phase_logic(chat_id, game_id)
         else:
             await day_phase_logic(chat_id, game_id)
-
         await asyncio.sleep(60)
 
 async def night_phase_logic(chat_id, game_id):
@@ -86,7 +87,6 @@ async def day_phase_logic(chat_id, game_id):
     kills = [a["target_id"] for a in actions if a["action"] == "kill"]
     heals = [a["target_id"] for a in actions if a["action"] == "heal"]
     spys = [a for a in actions if a["action"] == "spy"]
-
     victim = max(set(kills), key=kills.count) if kills else None
     if victim and victim not in heals:
         players_col.delete_one({"_id": victim})
@@ -94,31 +94,25 @@ async def day_phase_logic(chat_id, game_id):
         await app.send_message(chat_id, f"☠️ {user.first_name} was killed during the night.")
     else:
         await app.send_message(chat_id, "😴 No one was killed last night.")
-
     for spy_action in spys:
         target = players_col.find_one({"_id": spy_action["target_id"]})
         role = target.get("role", "Unknown")
         try:
-            await app.send_message(spy_action["user_id"], f"🕵️ You spied on {target.get('name', 'a player')}.
-Role: {role.capitalize()}")
+            await app.send_message(spy_action["user_id"], f"🕵️ You spied on {target.get('name', 'a player')}.\nRole: {role.capitalize()}")
         except:
             pass
-
     await voting_phase(chat_id, game_id)
 
 async def voting_phase(chat_id, game_id):
     players = list(players_col.find({"game_id": game_id}))
-    buttons = [[InlineKeyboardButton(f"{p.get('name', str(p['_id']))}", callback_data=f"vote_{p['_id']}")]
-               for p in players]
+    buttons = [[InlineKeyboardButton(p.get('name', str(p['_id'])), callback_data=f"vote_{p['_id']}")] for p in players]
     buttons.append([InlineKeyboardButton("Skip Vote", callback_data="vote_skip")])
     msg = await app.send_message(chat_id, "🗳️ Day Vote: Choose who to eliminate.", reply_markup=InlineKeyboardMarkup(buttons))
     await asyncio.sleep(60)
-
     votes = list(actions_col.find({"chat_id": chat_id, "action": "vote"}))
     vote_counts = {}
     for v in votes:
         vote_counts[v["target_id"]] = vote_counts.get(v["target_id"], 0) + 1
-
     if vote_counts:
         target = max(vote_counts, key=vote_counts.get)
         if target != "skip":
@@ -129,7 +123,6 @@ async def voting_phase(chat_id, game_id):
             await app.send_message(chat_id, "⚖️ No one was lynched today.")
     else:
         await app.send_message(chat_id, "⚖️ No votes received. No one lynched.")
-
     await check_win_condition(chat_id, game_id)
 
 def count_roles(game_id):
@@ -150,25 +143,14 @@ async def check_win_condition(chat_id, game_id):
         await app.send_message(chat_id, "🐺 Werewolves win! They outnumber the villagers.")
         await reset_game(chat_id)
 
-async def send_dm(user_id, text, action_type):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Select Target", callback_data=f"action_{action_type}")]
-    ])
-    try:
-        await app.send_message(user_id, text, reply_markup=keyboard)
-    except:
-        pass
-
 @app.on_callback_query(filters.regex(r"action_(kill|heal|spy)"))
 async def action_handler(client, callback):
     action = callback.data.split("_")[1]
     user_id = callback.from_user.id
     player = players_col.find_one({"_id": user_id})
     game_id = player.get("game_id")
-    chat_id = player.get("game_chat")
     others = list(players_col.find({"game_id": game_id, "_id": {"$ne": user_id}}))
-    buttons = [[InlineKeyboardButton(p.get("name", str(p["_id"])), callback_data=f"target_{action}_{p['_id']}")]
-               for p in others]
+    buttons = [[InlineKeyboardButton(p.get("name", str(p["_id"])), callback_data=f"target_{action}_{p['_id']}")] for p in others]
     await callback.message.edit_text("Select your target:", reply_markup=InlineKeyboardMarkup(buttons))
 
 @app.on_callback_query(filters.regex(r"target_(kill|heal|spy|vote)_"))
@@ -178,13 +160,11 @@ async def target_handler(client, callback):
     user_id = callback.from_user.id
     player = players_col.find_one({"_id": user_id})
     chat_id = player.get("game_chat")
-
     existing = actions_col.find_one({"chat_id": chat_id, "user_id": user_id, "action": action})
     if existing:
         actions_col.update_one({"_id": existing["_id"]}, {"$set": {"target_id": target_id}})
     else:
         actions_col.insert_one({"chat_id": chat_id, "user_id": user_id, "action": action, "target_id": target_id})
-
     await callback.answer("✅ Action submitted.", show_alert=True)
     await callback.message.delete()
 
