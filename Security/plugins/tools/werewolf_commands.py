@@ -2,7 +2,7 @@ from Security import app
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
-from plugins.tools.db import games_col, players_col
+from Security.plugins.tools.db import games_col, players_col
 from Security.plugins.tools.config import JOIN_TIME, MIN_PLAYERS, MAX_PLAYERS
 from Security.plugins.tools.werewolf_core import generate_roles, reset_game, day_night_cycle
 from datetime import datetime
