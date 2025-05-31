@@ -1,4 +1,4 @@
-SWfrom Security import app
+from Security import app
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
