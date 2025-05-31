@@ -1,5 +1,5 @@
 from Security import app
-from plugins.tools.db import games_col, players_col, actions_col
+from Security.plugins.tools.db import games_col, players_col, actions_col
 from plugins.tools.config import ROLE_WEREWOLF, ROLE_VILLAGER, ROLE_ALPHA, ROLE_DOCTOR, ROLE_SPY
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
