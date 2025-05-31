@@ -1,5 +1,6 @@
 from Security import app  
-from pyrogram import filters  
+from pyrogram import filters 
+from pyrogram.enums import ParseMode 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton  
 from Security.plugins.tools.db import players_col, actions_col, games_col  
 from bson import ObjectId  
@@ -91,7 +92,7 @@ async def reveal_role(client, callback):
     if disguised:  
         text += "🕵️‍♂️ You are currently disguised.\n"  
     await callback.answer()  
-    await callback.message.edit_text(text, parse_mode="Markdown")  
+    await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN)  
 
 @app.on_callback_query(filters.regex(r"bulkrole_"))
 async def bulkrole_handler(client, callback):
@@ -111,4 +112,4 @@ async def bulkrole_handler(client, callback):
         text += "🕵️‍♂️ You are currently disguised."
 
     await callback.answer()
-    await callback.message.edit_text(text, parse_mode="Markdown")
+    await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN)
