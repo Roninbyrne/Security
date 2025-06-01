@@ -1,5 +1,5 @@
 from Security import app
-from Security.plugins.tools import (
+from Security.plugins.werewolf import (
     werewolf_callbacks,
     werewolf_commands,
     werewolf_filters
