@@ -2,7 +2,7 @@ from Security import app
 from pyrogram import filters 
 from pyrogram.enums import ParseMode 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton  
-from Security.plugins.tools.db import players_col, actions_col, games_col  
+from Security.plugins.werewolf.db import players_col, actions_col, games_col  
 from bson import ObjectId  
 
 @app.on_callback_query(filters.regex(r"action_(kill|heal|spy)"))  
