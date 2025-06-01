@@ -1,6 +1,6 @@
 from Security import app
 from pyrogram import filters
-from Security.plugins.tools.db import games_col
+from Security.plugins.werewolf.db import games_col
 
 @app.on_message(filters.group & filters.text & ~filters.service)
 async def suppress_messages_at_night(client, message):
